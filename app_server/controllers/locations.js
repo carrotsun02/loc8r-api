@@ -6,7 +6,7 @@ const apiOptions = {
     server: 'http://localhost:3000'
 };
 if (process.env.NODE_ENV === 'production') {
-    apiOptions.server = 'https://yourapi.com'
+    apiOptions.server = 'https://loc8r-api-z1z0.onrender.com'
 }
 
 const homelist = (req, res) => {
