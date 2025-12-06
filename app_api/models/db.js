@@ -43,3 +43,5 @@ process.on('SIGTERM', function () {
 });
 
 require('./locations');
+
+require('./users'); // 2021810051 이민준

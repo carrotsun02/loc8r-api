@@ -1,5 +1,28 @@
 const mongoose = require('mongoose');
 const Loc = mongoose.model('Location');
+const User = mongoose.model('User');
+
+const getAuthor = async (req, res, callback) => { // async 함수로 변경
+    if(req.auth && req.auth.email){
+        try {
+            // await를 사용하여 Promise 기반으로 쿼리 실행
+            const user = await User.findOne({email: req.auth.email}).exec(); 
+            
+            if(!user){
+                return res.status(404).json({"message": "User not found"});
+            }
+            
+            // 콜백에 사용자 이름을 전달하여 원래 로직 유지
+            callback(req, res, user.name); 
+
+        } catch (err) {
+            console.log(err);
+            return res.status(404).json(err);
+        }
+    } else {
+        return res.status(404).json({"message": "User not found"});
+    }
+}
 
 const doSetAverageRating = async (location) => {
     if (location.reviews && location.reviews.length > 0 ) {
@@ -29,40 +52,54 @@ const updatedAverageRating = async (locationId) => {
     }
 };
 
-const doAddReview = async (req, res, location) => {
+const doAddReview = async (req, res, location, author) => { // async 함수로 변경
     if (!location) {
-        return res.status(404).json({ "message": "Location not found" });
-    }
-
-    const { author, rating, reviewText } = req.body;
-    location.reviews.push({ author, rating, reviewText });
-
-    try {
-        const updatedLocation = await location.save();
-        await updatedAverageRating(updatedLocation._id);
-        const thisReview = updatedLocation.reviews.slice(-1).pop();
-        return res.status(201).json(thisReview);
-    } catch (err) {
-        return res.status(400).json(err);
+        // 이 경로는 사실상 위의 reviewsCreate에서 걸러지므로 실행되지 않을 가능성이 높음
+        res.status(404).json({"message": "Location not found"});
+    } else {
+        const {rating, reviewText} = req.body;
+        location.reviews.push({
+            author,
+            rating,
+            reviewText
+        });
+        
+        try {
+            // location.save()를 await로 변경
+            const savedLocation = await location.save(); 
+            
+            // updateAverageRating을 호출합니다. (오타 수정: updatedAverageRating)
+            await updatedAverageRating(savedLocation._id); 
+            
+            const thisReview = savedLocation.reviews.slice(-1).pop();
+            res.status(201).json(thisReview);
+        } catch (err) {
+            res.status(400).json(err);
+        }
     }
 };
 
-const reviewsCreate = async (req, res) => {
-    const locationId = req.params.locationid;
-    if (!locationId) {
-        return res.status(404).json({ "message": "Location not found" });
-    }
-
-    try {
-        const location = await Loc.findById(locationId).select('reviews').exec();
-        if (location) {
-            await doAddReview(req, res, location);
+const reviewsCreate = (req, res) => {
+    getAuthor(req, res, async (req, res, userName) => { // 콜백 함수를 async로 선언
+        const locationId = req.params.locationid;
+        if (locationId) {
+            try {
+                // Loc.findById 쿼리를 await로 변경
+                const location = await Loc.findById(locationId).select('reviews').exec(); 
+                
+                if (location) {
+                    // doAddReview도 async/await으로 변경하는 경우
+                    await doAddReview(req, res, location, userName);
+                } else {
+                    res.status(404).json({"message": "Location not found"});
+                }
+            } catch (err) {
+                res.status(400).json(err);
+            }
         } else {
-            return res.status(404).json({ "message": "Location not found" });
+            res.status(404).json({"message": "Location not found"});
         }
-    } catch (err) {
-        return res.status(400).json(err);
-    }
+    });
 };
 
 const reviewsReadOne = async (req, res) => {
